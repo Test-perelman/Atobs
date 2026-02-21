@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  role         String    @default("viewer")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  jobsCreated         Job[]         @relation("CreatedBy")
+  jobsAssigned        Job[]         @relation("AssignedRecruiter")
+  applicationsManaged Application[] @relation("ApplicationRecruiter")
+  notes               Note[]
+  documents           Document[]
+  auditLogs           AuditLog[]
+}
+
+model Job {
+  id                String    @id @default(uuid())
+  title             String
+  department        String?
+  locationCity      String?
+  locationState     String?
+  isRemote          Boolean   @default(false)
+  jobType           String    @default("full_time")
+  visaSponsorship   Boolean   @default(true)
+  internalNotes     String?
+  salaryMin         Int?
+  salaryMax         Int?
+  publicTitle       String?
+  publicDescription String
+  prerequisites     String?
+  responsibilities  String?
+  showSalary        Boolean   @default(false)
+  isPublished       Boolean   @default(false)
+  status            String    @default("open")
+  closedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  createdById         String
+  createdBy           User          @relation("CreatedBy", fields: [createdById], references: [id])
+  assignedRecruiterId String?
+  assignedRecruiter   User?         @relation("AssignedRecruiter", fields: [assignedRecruiterId], references: [id])
+  applications        Application[]
+}
+
+model Candidate {
+  id                String    @id @default(uuid())
+  firstName         String
+  lastName          String
+  email             String
+  phone             String?
+  locationCity      String?
+  locationState     String?
+  linkedinUrl       String?
+  visaStatus        String?
+  visaExpiryDate    DateTime?
+  passportCountry   String?
+  passportExpiry    DateTime?
+  i94Number         String?
+  currentEmployer   String?
+  experienceYears   Int?
+  salaryExpectation Int?
+  skills            String?
+  source            String?   @default("job_board")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  applications Application[]
+  documents    Document[]
+}
+
+model Application {
+  id              String   @id @default(uuid())
+  stage           String   @default("resume_received")
+  isProcessed     Boolean  @default(false)
+  rejectionReason String?
+  appliedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  jobId               String
+  job                 Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateId         String
+  candidate           Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  assignedRecruiterId String?
+  assignedRecruiter   User?     @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
+
+  notes     Note[]
+  documents Document[]
+
+  @@unique([jobId, candidateId])
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  content     String
+  stageAtTime String?
+  isStageNote Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id])
+}
+
+model Document {
+  id               String   @id @default(uuid())
+  docType          String   @default("other")
+  originalFilename String
+  storagePath      String
+  fileSizeBytes    Int?
+  mimeType         String?
+  uploadedAt       DateTime @default(now())
+
+  candidateId   String
+  candidate     Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id])
+  uploadedById  String?
+  uploadedBy    User?        @relation(fields: [uploadedById], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entityType  String
+  entityId    String
+  action      String
+  oldValue    String?
+  newValue    String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  performedById String?
+  performedBy   User?   @relation(fields: [performedById], references: [id])
+}

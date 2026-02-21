@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Environment variables — NEVER commit these
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+
+# Credentials
+credentials.md
+credentials.txt
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Build output
+dist/
+build/
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Uploads (user-uploaded files)
+api/uploads/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Claude Code local config
+.claude/
