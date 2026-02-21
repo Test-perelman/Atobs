@@ -1,68 +1,122 @@
-# ATOBS — Claude Project Instructions
+# ATOBS — Claude Instructions
 
-## Project Overview
-ATOBS is a two-module app: ATS (private recruiter dashboard) + Job Board (public).
-Phase 1: Local dev with SQLite. Phase 2: PostgreSQL on Hostinger VPS.
+## Stack
+- `api/` — Fastify + TypeScript + Prisma, port **3005**
+- `web/` — React + Vite + Tailwind, port **5173** (proxies `/api` → `:3005`)
+- DB — PostgreSQL 16 on Hostinger VPS (`72.61.224.142`)
+- Deployed at **https://atobs.srv1396863.hstgr.cloud** (Docker + Traefik)
 
-## Structure
-- `api/` — Fastify + TypeScript + Prisma backend (port 3001)
-- `web/` — React + Vite + Tailwind frontend (port 5173, proxies /api to :3001)
-
-## Key Commands
+## Local Dev
 ```bash
-# Backend
-cd api && npm install
-cd api && npx prisma migrate dev --name init
-cd api && npx prisma db seed
-cd api && npm run dev
+cd api && npm run dev      # starts API on :3005
+cd web && npm run dev      # starts frontend on :5173
+```
+The local API connects directly to the production PostgreSQL on the VPS (port 5432 is open to this machine's IP). No local DB needed.
 
-# Frontend
-cd web && npm install
-cd web && npm run dev
+## Production Deployment
+App runs on VPS as Docker containers. Traefik handles HTTPS + routing.
+
+```
+/docker/atobs/
+├── api/           ← cloned from GitHub + .env written manually
+├── web/
+├── docker-compose.yml
+└── deploy.sh      ← run this to redeploy
 ```
 
+### To deploy after making code changes:
+```bash
+# 1. Commit and push to GitHub
+git add <files>
+git commit -m "description"
+git push origin master
+
+# 2. SSH to VPS and run deploy script
+ssh root@72.61.224.142    # passphrase in credentials.md
+cd /docker/atobs && bash deploy.sh
+```
+`deploy.sh` does: `git pull` → `docker compose build --no-cache` → `docker compose up -d`
+
+### To update environment variables on VPS:
+```bash
+ssh root@72.61.224.142
+nano /docker/atobs/api/.env    # edit in place (this file is NOT in git)
+cd /docker/atobs && docker compose restart atobs-api
+```
+Note: `.env` is gitignored. The VPS copy was written manually. See `credentials.md` for all values.
+
 ## Database
-- SQLite in `api/prisma/dev.db` (Phase 1)
-- Schema in `api/prisma/schema.prisma`
-- Do NOT manually edit dev.db — use Prisma migrations
-- Browse data: `cd api && npx prisma studio`
+- Provider: PostgreSQL (`api/prisma/schema.prisma`)
+- Migrations: `api/prisma/migrations/`
+- ORM: Prisma — **never edit DB manually**, always use migrations
+
+```bash
+# Add a new migration (run locally, connects to VPS DB)
+cd api && npx prisma migrate dev --name describe_change
+
+# Deploy migrations on VPS (inside the container or via SSH)
+ssh root@72.61.224.142 "cd /docker/atobs/api && npx prisma migrate deploy"
+
+# Browse data (connects to VPS DB from local)
+cd api && npx prisma studio
+```
 
 ## Auth
-- JWT access token (15min) returned in JSON response body
-- Refresh token (7d) stored in httpOnly Secure cookie
+- `POST /api/auth/login` → returns `{ accessToken, user }` in body + httpOnly `refreshToken` cookie
+- Access token: 15min JWT. Refresh token: 7d cookie.
 - Roles: `admin` | `recruiter` | `hiring_manager` | `viewer`
-- All `/api/ats/*` routes require valid JWT
-- Public routes: GET `/api/jobs`, GET `/api/jobs/:id`, POST `/api/jobs/:id/apply`
+- Protected: all `/api/ats/*` routes require Bearer token
+- Public: `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/apply`
+- Frontend stores token in `localStorage.accessToken`, auto-refreshes on 401
 
-## File Uploads
-- Phase 1: stored at `api/uploads/{candidateId}/{uuid}.{ext}`
-- API streams files — never expose raw storage paths to clients
-- Max size: 10MB per file
-- Allowed MIME types: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, image/jpeg, image/png
+## Key Conventions
+- `Candidate` = person. `Application` = candidate × job with pipeline state (one candidate can have multiple applications across jobs).
+- Stage changes **require** `noteContent` in request body — enforced in both API and frontend modal.
+- Stage change beyond `resume_received` sets `isProcessed = true` automatically.
+- All stage changes write an `AuditLog` record.
+- Skills stored as JSON string: `'["React","Node.js"]'`
+- File uploads: local path `api/uploads/{candidateId}/{uuid}.ext`, max 10MB, allowed: pdf/doc/docx/jpg/png
 
-## Pipeline Stages (in order)
+## Pipeline Stages
 ```
 resume_received → screened → vetted → interview_scheduled → interview_completed
 → client_submitted → client_interview → offer_awaiting → offer_released
-→ h1b_filed → hired / rejected
+→ h1b_filed → hired | rejected
 ```
 
-## Important Conventions
-- Stage changes REQUIRE a note body (`noteContent` field) — enforced in API + frontend modal
-- All stage changes write an AuditLog record
-- `Candidate` = the person. `Application` = candidate × job link with pipeline state.
-- One candidate can apply to multiple jobs (separate Application records)
-- `isProcessed = false` → "Not Processed" tab in job view
-- `isProcessed = true` → "Processed" tab (set automatically on first stage change beyond resume_received)
-- Skills stored as JSON string in SQLite: `'["React","Node.js"]'`
+## Seed Accounts
+| Email | Password | Role |
+|---|---|---|
+| admin@atobs.com | admin123 | admin |
+| recruiter@atobs.com | recruiter123 | recruiter |
+| manager@atobs.com | manager123 | hiring_manager |
 
-## Seed Credentials
-- Admin: `admin@atobs.com` / `admin123`
-- Recruiter: `recruiter@atobs.com` / `recruiter123`
+## File Map (key files only)
+```
+api/src/
+  app.ts                   ← Fastify entry, registers all routes
+  plugins/auth.ts          ← signAccessToken, signRefreshToken, authenticate middleware
+  routes/auth/index.ts     ← login, refresh, logout, /me
+  routes/public/           ← jobs list, job detail, apply form
+  routes/ats/              ← jobs, applications, notes, documents, analytics, users
+  services/storage.ts      ← file save/read/delete (local disk)
+  services/audit.ts        ← writeAuditLog()
 
-## Phase 2 Migration Notes
-1. Change `provider = "sqlite"` → `provider = "postgresql"` in `api/prisma/schema.prisma`
-2. Change `DATABASE_URL` to PostgreSQL connection string in `api/.env`
-3. Run `npx prisma migrate deploy`
-4. Update `api/src/services/storage.ts` to use MinIO instead of local filesystem
-5. Update `api/.env` with MinIO credentials
+web/src/
+  App.tsx                  ← React Router, RequireAuth guard
+  lib/api.ts               ← Axios instance, auto-refresh interceptor
+  lib/auth.ts              ← localStorage helpers
+  lib/types.ts             ← all TS interfaces + STAGE_CONFIG
+  components/layout/       ← ATSLayout (sidebar), PublicLayout (navbar + sign in btn)
+  pages/ats/               ← Dashboard, Jobs, Candidates, Analytics, Settings
+  pages/public/            ← JobBoard, JobDetail, ApplyForm
+```
+
+## Infrastructure
+- VPS: `72.61.224.142` (Ubuntu 24.04, 2 vCPU, 8GB RAM)
+- SSH: `root@72.61.224.142` — key at `D:\VGS\Credentials\Hostinger Vps SSH\id_ed25519`
+- PostgreSQL 16 listens on `*:5432`, pg_hba allows: localhost, Docker subnets (172.16.0.0/12), dev machine IP
+- Docker network: `n8n_default` (shared with n8n + Traefik)
+- API container connects to PostgreSQL via `172.17.0.1:5432` (Docker host gateway)
+- Traefik auto-renews TLS via Let's Encrypt; n8n runs alongside at `n8n.srv1396863.hstgr.cloud`
+- Sensitive values (DB password, JWT secrets, SSH passphrase) are in `credentials.md` (gitignored, local only)
