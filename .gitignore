@@ -3,10 +3,11 @@ node_modules/
 
 # Environment variables — NEVER commit these
 .env
-.env.*
 .env.local
 .env.production
 .env.development
+# Allow .env.example (template without real secrets)
+!.env.example
 
 # Credentials
 credentials.md
