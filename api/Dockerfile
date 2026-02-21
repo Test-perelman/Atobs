@@ -1,6 +1,9 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
+
+# Install openssl for Prisma
+RUN apt-get update -qq && apt-get install -y -qq openssl && rm -rf /var/lib/apt/lists/*
 
 # Install all deps (devDeps needed for tsc)
 COPY package*.json ./
@@ -16,9 +19,12 @@ COPY tsconfig.json ./
 RUN ./node_modules/.bin/tsc
 
 # Production image
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
+
+# Install openssl for Prisma runtime
+RUN apt-get update -qq && apt-get install -y -qq openssl && rm -rf /var/lib/apt/lists/*
 
 # Production deps only
 COPY package*.json ./
