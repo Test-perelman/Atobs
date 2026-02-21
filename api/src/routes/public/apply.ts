@@ -92,22 +92,23 @@ export default async function applyRoute(app: FastifyInstance) {
       })
     } else {
       // Update candidate with new info
+      const existing = existingCandidate!
       candidate = await prisma.candidate.update({
-        where: { id: existingCandidate.id },
+        where: { id: existing.id },
         data: {
-          phone: fields.phone || existingCandidate.phone,
-          locationCity: fields.locationCity || existingCandidate.locationCity,
-          locationState: fields.locationState || existingCandidate.locationState,
-          linkedinUrl: fields.linkedinUrl || existingCandidate.linkedinUrl,
-          visaStatus: fields.visaStatus || existingCandidate.visaStatus,
-          currentEmployer: fields.currentEmployer || existingCandidate.currentEmployer,
+          phone: fields.phone || existing.phone,
+          locationCity: fields.locationCity || existing.locationCity,
+          locationState: fields.locationState || existing.locationState,
+          linkedinUrl: fields.linkedinUrl || existing.linkedinUrl,
+          visaStatus: fields.visaStatus || existing.visaStatus,
+          currentEmployer: fields.currentEmployer || existing.currentEmployer,
           experienceYears: fields.experienceYears
             ? parseInt(fields.experienceYears)
-            : existingCandidate.experienceYears,
+            : existing.experienceYears,
           salaryExpectation: fields.salaryExpectation
             ? parseInt(fields.salaryExpectation)
-            : existingCandidate.salaryExpectation,
-          skills: fields.skills || existingCandidate.skills,
+            : existing.salaryExpectation,
+          skills: fields.skills || existing.skills,
         },
       })
     }
