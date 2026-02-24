@@ -41,4 +41,5 @@ RUN mkdir -p uploads
 
 EXPOSE 3005
 
-CMD ["node", "dist/app.js"]
+# Run migrations before starting app
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/app.js"]

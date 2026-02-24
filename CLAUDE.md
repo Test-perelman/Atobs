@@ -3,15 +3,15 @@
 ## Stack
 - `api/` — Fastify + TypeScript + Prisma, port **3005**
 - `web/` — React + Vite + Tailwind, port **5173** (proxies `/api` → `:3005`)
-- DB — PostgreSQL 16 on Hostinger VPS (`72.61.224.142`)
-- Deployed at **https://atobs.srv1396863.hstgr.cloud** (Docker + Traefik)
+- DB — **MySQL 8.0** on Hostinger (`u758649328_atobs_intellan`)
+- Deployed at **https://atobs.srv1396863.hstgr.cloud** (Docker + Traefik on VPS)
 
 ## Local Dev
 ```bash
 cd api && npm run dev      # starts API on :3005
 cd web && npm run dev      # starts frontend on :5173
 ```
-The local API connects directly to the production PostgreSQL on the VPS (port 5432 is open to this machine's IP). No local DB needed.
+**Note:** Local dev currently cannot connect to Hostinger MySQL (firewall restrictions). Use staging/production deployments to test database functionality.
 
 ## Production Deployment
 App runs on VPS as Docker containers. Traefik handles HTTPS + routing.
@@ -46,20 +46,21 @@ cd /docker/atobs && docker compose restart atobs-api
 Note: `.env` is gitignored. The VPS copy was written manually. See `credentials.md` for all values.
 
 ## Database
-- Provider: PostgreSQL (`api/prisma/schema.prisma`)
-- Migrations: `api/prisma/migrations/`
+- Provider: **MySQL 8.0** (`api/prisma/schema.prisma`)
+- Migrations: `api/prisma/migrations/` (auto-generated via Prisma)
 - ORM: Prisma — **never edit DB manually**, always use migrations
 
 ```bash
-# Add a new migration (run locally, connects to VPS DB)
-cd api && npx prisma migrate dev --name describe_change
+# Create a new migration (after schema changes)
+cd api && npm run db:migrate -- --name describe_change
 
-# Deploy migrations on VPS (inside the container or via SSH)
-ssh root@72.61.224.142 "cd /docker/atobs/api && npx prisma migrate deploy"
+# Deploy migrations on VPS during docker compose up
+# (Migrations run automatically in the container startup)
 
-# Browse data (connects to VPS DB from local)
-cd api && npx prisma studio
+# To manually run migrations on VPS (if needed):
+ssh root@72.61.224.142 "docker exec atobs-api npx prisma migrate deploy"
 ```
+Migrations are automatically applied when the Docker container starts (via `prisma migrate deploy` in entrypoint).
 
 ## Auth
 - `POST /api/auth/login` → returns `{ accessToken, user }` in body + httpOnly `refreshToken` cookie
@@ -115,8 +116,11 @@ web/src/
 ## Infrastructure
 - VPS: `72.61.224.142` (Ubuntu 24.04, 2 vCPU, 8GB RAM)
 - SSH: `root@72.61.224.142` — key at `D:\VGS\Credentials\Hostinger Vps SSH\id_ed25519`
-- PostgreSQL 16 listens on `*:5432`, pg_hba allows: localhost, Docker subnets (172.16.0.0/12), dev machine IP
+- **MySQL 8.0** on Hostinger managed hosting (not self-hosted on VPS)
+  - Host: Hostinger database server (not VPS IP)
+  - Connection: Via Hostinger's internal network
+  - Credentials: See `credentials.md`
 - Docker network: `n8n_default` (shared with n8n + Traefik)
-- API container connects to PostgreSQL via `172.17.0.1:5432` (Docker host gateway)
+- App containers connect to Hostinger MySQL via `DATABASE_URL` in `.env`
 - Traefik auto-renews TLS via Let's Encrypt; n8n runs alongside at `n8n.srv1396863.hstgr.cloud`
 - Sensitive values (DB password, JWT secrets, SSH passphrase) are in `credentials.md` (gitignored, local only)
